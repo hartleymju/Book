@@ -1,0 +1,36 @@
+name: Auto-mark Private Book
+
+on:
+  schedule:
+    # Every 5 min across US market hours. 13:00-21:59 UTC covers 09:30-16:00
+    # New York year-round (EDT and EST); mark.py itself enforces the exact
+    # 09:30-16:00 NY window and weekdays, so off-hours runs exit instantly.
+    - cron: '*/5 13-21 * * 1-5'
+    # Crypto marks around the clock, every 30 minutes.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force equity marks even outside market hours'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: automark
+  cancel-in-progress: false
+
+jobs:
+  mark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Mark the book
+        env:
+          JSONBIN_KEY: ${{ secrets.JSONBIN_KEY }}
+          JSONBIN_BIN: 6a4d02a9da38895dfe3adc02
+          FORCE: ${{ github.event.inputs.force == 'true' && '1' || '0' }}
+        run: python mark.py
