@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Private Book</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Archivo:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500&display=swap');
+
+:root{
+  --ink:#15181E; --surface:#1C2028; --line:#2C313B; --line-soft:#242832;
+  --paper:#E9E5DA; --dim:#8E8B7F; --brass:#C4A265; --brass-dk:#9D8047;
+  --gain:#7CB894; --loss:#CE7263;
+}
+*{box-sizing:border-box}
+body{margin:0; min-height:100vh; background:var(--ink); color:var(--paper); font-family:'Archivo',system-ui,sans-serif; font-size:14px; line-height:1.5}
+button{cursor:pointer; font-family:inherit}
+:focus-visible{outline:2px solid var(--brass); outline-offset:2px}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important; animation:none!important} }
+
+.mast{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); flex-wrap:wrap}
+.mast-name{display:flex; align-items:center; gap:14px}
+.mast-mark{font-family:'Fraunces',serif; font-size:22px; color:var(--ink); background:var(--brass); width:34px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:2px}
+.mast-title{font-family:'Fraunces',serif; font-size:18px; letter-spacing:0.02em}
+.mast-sub{font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--dim)}
+.tabs{display:flex; gap:4px; flex-wrap:wrap}
+.tab{background:none; border:1px solid transparent; color:var(--dim); padding:7px 14px; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; border-radius:2px; transition:color .15s,border-color .15s}
+.tab:hover{color:var(--paper)}
+.tab.on{color:var(--brass); border-color:var(--brass-dk)}
+
+.sync-row{display:flex; align-items:center; gap:10px; padding:8px 28px; border-bottom:1px solid var(--line-soft); font-size:11px; color:var(--dim); flex-wrap:wrap}
+.sync-dot{width:8px; height:8px; border-radius:50%; background:var(--dim)}
+.sync-dot.ok{background:var(--gain)} .sync-dot.err{background:var(--loss)} .sync-dot.off{background:var(--dim)}
+.sync-row .spacer{margin-left:auto}
+
+.nav-strip{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:24px; padding:30px 28px 26px; border-bottom:1px solid var(--line); background:linear-gradient(180deg, rgba(196,162,101,0.045), rgba(196,162,101,0))}
+.eyebrow{font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--dim)}
+.nav-figure{font-family:'Fraunces',serif; font-weight:600; font-size:56px; line-height:1.05; margin-top:6px; font-variant-numeric:tabular-nums}
+.nav-warn{margin-top:6px; font-size:12px; color:var(--brass)}
+.nav-stats{display:flex; align-items:flex-end}
+.nav-stat{padding:0 22px; border-left:1px solid var(--line)}
+.nav-stat:first-child{border-left:none}
+.stat-val{font-family:'Spline Sans Mono',monospace; font-size:18px; margin-top:6px; font-variant-numeric:tabular-nums}
+.gain{color:var(--gain)} .loss{color:var(--loss)}
+.cash-btn{background:none; border:none; color:var(--paper); padding:0; text-align:left; border-bottom:1px dashed var(--line); display:block; font-family:'Spline Sans Mono',monospace; font-size:18px; margin-top:6px}
+.nav-action{display:flex; align-items:center}
+
+.banner{margin:14px 28px 0; padding:10px 14px; border-radius:2px; font-size:13px; display:none}
+.banner.show{display:block}
+.banner.ok{background:rgba(124,184,148,0.12); color:var(--gain); border:1px solid rgba(124,184,148,0.3)}
+.banner.err{background:rgba(206,114,99,0.12); color:var(--loss); border:1px solid rgba(206,114,99,0.3)}
+
+.page{padding:26px 28px 40px; max-width:1180px}
+.page-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:12px; flex-wrap:wrap}
+.h2{font-family:'Fraunces',serif; font-weight:500; font-size:22px; margin:0}
+.h3{font-family:'Fraunces',serif; font-weight:500; font-size:17px; margin:0}
+
+.btn{background:var(--surface); border:1px solid var(--line); color:var(--paper); padding:8px 16px; font-size:12px; letter-spacing:0.08em; text-transform:uppercase; border-radius:2px; transition:border-color .15s}
+.btn:hover:not(:disabled){border-color:var(--brass-dk)}
+.btn:disabled{opacity:0.45; cursor:default}
+.btn.brass{background:var(--brass); border-color:var(--brass); color:var(--ink); font-weight:600}
+.btn.brass:hover:not(:disabled){background:#D2B37B}
+.btn.ghost{background:transparent}
+.btn.tiny{padding:4px 10px; font-size:11px}
+.btn.danger{color:var(--loss)}
+
+.table-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:2px}
+table{width:100%; border-collapse:collapse; min-width:840px}
+th{font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--dim); font-weight:500; text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface)}
+td{padding:12px 14px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(196,162,101,0.03)}
+.num{text-align:right}
+th.num{text-align:right}
+.mono{font-family:'Spline Sans Mono',monospace; font-variant-numeric:tabular-nums; font-size:13px}
+.tick{font-family:'Spline Sans Mono',monospace; font-weight:500; letter-spacing:0.04em}
+.venue{font-size:11px; color:var(--dim); margin-top:2px}
+.src{font-size:10px; color:var(--dim); margin-top:2px}
+.dim{color:var(--dim)}
+
+.empty{border:1px dashed var(--line); border-radius:2px; padding:34px; text-align:center; color:var(--dim); font-size:13px}
+
+.sheet{border:1px solid var(--line); border-radius:2px; background:var(--surface); padding:20px; margin-bottom:22px}
+.sheet-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px}
+.sheet-foot{display:flex; justify-content:flex-end; align-items:center; gap:14px; margin-top:16px; flex-wrap:wrap}
+.hint{font-size:12px; color:var(--dim); margin-right:auto}
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px}
+.fld{display:flex; flex-direction:column; gap:5px}
+.fld>span{font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--dim)}
+.fld.wide{grid-column:1/-1}
+.inp{background:var(--ink); border:1px solid var(--line); color:var(--paper); padding:8px 10px; border-radius:2px; font-family:'Spline Sans Mono',monospace; font-size:13px; width:100%}
+.inp:focus{border-color:var(--brass-dk); outline:none}
+textarea.inp{font-family:'Archivo',sans-serif; min-height:64px; resize:vertical}
+.row-inline{display:flex; gap:8px; align-items:center}
+
+.blot-item{border:1px solid var(--line); border-radius:2px; padding:12px 16px; background:var(--surface); margin-bottom:10px}
+.blot-line{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+.blot-line .date{margin-left:auto}
+.side{font-size:10px; letter-spacing:0.16em; padding:2px 8px; border-radius:2px; font-weight:600}
+.side.buy{background:rgba(124,184,148,0.15); color:var(--gain)}
+.side.sell{background:rgba(206,114,99,0.15); color:var(--loss)}
+.blot-note{margin:8px 0 0; font-size:13px; border-left:2px solid var(--brass-dk); padding-left:12px; opacity:0.9}
+
+.idea-list{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px}
+.idea{border:1px solid var(--line); border-radius:2px; background:var(--surface); padding:16px}
+.idea.passed{opacity:0.55}
+.idea-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.idea-head .date{margin-left:auto}
+.dir{font-size:10px; letter-spacing:0.14em; padding:2px 7px; border-radius:2px}
+.dir.long{background:rgba(124,184,148,0.15); color:var(--gain)}
+.dir.short{background:rgba(206,114,99,0.15); color:var(--loss)}
+.dir.event{background:rgba(196,162,101,0.15); color:var(--brass)}
+.status{font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--dim)}
+.status.s-entered{color:var(--brass)}
+.idea p{margin:10px 0 0; font-size:13px}
+.idea .trg{color:var(--brass); font-size:12px; margin-top:8px}
+.idea-actions{display:flex; gap:8px; margin-top:12px}
+
+.wire-item{border:1px solid var(--line); border-radius:2px; background:var(--surface); padding:16px 18px; margin-bottom:12px; max-width:760px}
+.wire-meta{display:flex; align-items:center; gap:10px; font-size:11px; flex-wrap:wrap}
+.chip{font-family:'Spline Sans Mono',monospace; font-size:11px; color:var(--brass); border:1px solid var(--brass-dk); padding:1px 7px; border-radius:2px}
+.wire-head{font-family:'Fraunces',serif; font-weight:500; font-size:16px; margin:8px 0 6px}
+.wire-sum{margin:0; font-size:13px; opacity:0.85}
+
+.log-item{display:flex; gap:14px; padding:10px 0; border-bottom:1px solid var(--line-soft); font-size:13px; align-items:baseline}
+.log-item:last-child{border-bottom:none}
+.actor{font-size:10px; letter-spacing:0.14em; text-transform:uppercase; padding:2px 8px; border-radius:2px; flex-shrink:0}
+.actor.you{background:rgba(233,229,218,0.08); color:var(--paper)}
+.actor.claude{background:rgba(196,162,101,0.18); color:var(--brass)}
+.actor.system{background:rgba(142,139,127,0.15); color:var(--dim)}
+.log-ts{font-family:'Spline Sans Mono',monospace; font-size:11px; color:var(--dim); flex-shrink:0; width:120px}
+
+.foot{display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px 28px 26px; border-top:1px solid var(--line); font-size:11px; color:var(--dim); flex-wrap:wrap}
+
+code.kbd{background:var(--ink); border:1px solid var(--line); padding:1px 6px; border-radius:2px; font-size:12px}
+
+@media (max-width:720px){
+  .nav-figure{font-size:40px}
+  .nav-strip{padding:22px 18px}
+  .nav-stats{flex-wrap:wrap; gap:14px}
+  .nav-stat{border-left:none; padding:0}
+  .page{padding:20px 18px 32px}
+}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="mast-name">
+    <span class="mast-mark">P</span>
+    <div>
+      <div class="mast-title">Private Book</div>
+      <div class="mast-sub">position monitor · collaborative edition</div>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs"></nav>
+</header>
+
+<div class="sync-row">
+  <span class="sync-dot off" id="syncDot"></span>
+  <span id="syncLabel">Sync off — local only. Configure in Settings.</span>
+  <span class="spacer"></span>
+  <button class="btn tiny ghost" id="pullBtn">Pull</button>
+  <button class="btn tiny ghost" id="pushBtn">Push</button>
+</div>
+
+<section class="nav-strip">
+  <div>
+    <div class="eyebrow" id="navEyebrow">Net asset value · unmarked</div>
+    <div class="nav-figure" id="aumFig">$0</div>
+    <div class="nav-warn" id="navWarn" style="display:none"></div>
+  </div>
+  <div class="nav-stats">
+    <div class="nav-stat"><div class="eyebrow">Unrealised</div><div class="stat-val" id="uplFig">—</div></div>
+    <div class="nav-stat"><div class="eyebrow">Realised</div><div class="stat-val" id="rlzFig">—</div></div>
+    <div class="nav-stat"><div class="eyebrow">Cash</div><button class="cash-btn" id="cashBtn" title="Edit cash">$0</button></div>
+    <div class="nav-stat nav-action"><button class="btn brass" id="markBtn">Mark to market</button></div>
+  </div>
+</section>
+
+<div class="banner" id="banner"></div>
+<main class="page" id="page"></main>
+
+<footer class="foot">
+  <span>Marks: Hyperliquid mids (crypto &amp; HIP-3 dexes) · Yahoo live API (equities) · manual override. Base currency USD.</span>
+  <button class="btn ghost danger" id="resetBtn">Reset book</button>
+</footer>
+
+<script>
+"use strict";
+// ————————————————————————————————————————————————
+// Private Book — collaborative edition
+// State lives locally (localStorage) and, when configured, in a private
+// JSONBin the PM and Claude both read/write. Every mutation is logged.
+// ————————————————————————————————————————————————
+
+const LS_STATE = "pms_local_v1";
+const LS_CFG   = "pms_sync_cfg_v1";
+const ACTOR    = "you"; // Claude writes with actor "claude" when editing the bin
+
+const DEFAULT_STATE = {
+  version: 1,
+  cash: 0,
+  realized: 0,
+  positions: [], // {id,ticker,venue,qty,avgEntry,notes,openedAt}
+  trades: [],    // {id,ticker,side,qty,price,date,commentary,ts}
+  ideas: [],     // {id,ticker,direction,thesis,trigger,status,createdAt}
+  prices: {},    // {TICKER:{px,ts,src}}
+  news: { items: [], fetchedAt: null },
+  changelog: [], // {ts,actor,action,detail}
+  claudeNotes: "", // free-form message board Claude can write into
+  cashSweep: true, // trades debit/credit the cash balance automatically
+};
+
+let state = load(LS_STATE, DEFAULT_STATE);
+let cfg   = load(LS_CFG, { binId: "", key: "", finnhub: "", autoPull: false });
+let page  = "book";
+let remoteVersionSeen = state.version;
+let pollTimer = null;
+
+function load(k, dflt){ try { const v = localStorage.getItem(k); return v ? Object.assign({}, dflt, JSON.parse(v)) : {...dflt}; } catch(e){ return {...dflt}; } }
+function persistLocal(){ try { localStorage.setItem(LS_STATE, JSON.stringify(state)); } catch(e){} }
+function persistCfg(){ try { localStorage.setItem(LS_CFG, JSON.stringify(cfg)); } catch(e){} }
+
+// ————— formatting —————
+const fmtUSD = (n, dp) => {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  const abs = Math.abs(n);
+  const d = dp !== undefined ? dp : abs >= 1000 ? 0 : abs >= 1 ? 2 : 4;
+  return n.toLocaleString("en-US", { style:"currency", currency:"USD", minimumFractionDigits:d, maximumFractionDigits:d });
+};
+const fmtNum = n => (n===null||n===undefined||isNaN(n)) ? "—" : n.toLocaleString("en-US",{maximumFractionDigits:Math.abs(n)>=100?0:Math.abs(n)>=1?2:4});
+const fmtPct = n => (n===null||isNaN(n)) ? "—" : `${n>=0?"+":""}${(n*100).toFixed(1)}%`;
+const signed = (n, dp) => (n===null||n===undefined||isNaN(n)) ? "—" : `${n>=0?"+":"−"}${fmtUSD(Math.abs(n), dp)}`;
+const timeStr = ts => ts ? new Date(ts).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ————— changelog —————
+function logEvent(action, detail, actor = ACTOR){
+  state.changelog.unshift({ ts: Date.now(), actor, action, detail });
+  if (state.changelog.length > 500) state.changelog.length = 500;
+}
+
+// commit = log + bump version + save + render + (push if synced)
+function commit(action, detail, opts = {}){
+  if (action) logEvent(action, detail);
+  state.version += 1;
+  persistLocal();
+  render();
+  if (cfg.binId && cfg.key && !opts.noPush) pushRemote(true);
+}
+
+// ————— sync (JSONBin v3) —————
+const BIN_API = "https://api.jsonbin.io/v3/b";
+function syncStatus(kind, msg){
+  const dot = document.getElementById("syncDot");
+  dot.className = "sync-dot " + kind;
+  document.getElementById("syncLabel").textContent = msg;
+}
+
+async function createBin(){
+  if (!cfg.key) return flash("err", "Enter your JSONBin master key first.");
+  try {
+    const res = await fetch(BIN_API, { method:"POST", headers:{ "Content-Type":"application/json", "X-Master-Key":cfg.key, "X-Bin-Name":"private-book", "X-Bin-Private":"true" }, body: JSON.stringify(state) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || res.status);
+    cfg.binId = data.metadata.id; persistCfg();
+    remoteVersionSeen = state.version;
+    syncStatus("ok", `Synced · bin ${cfg.binId}`);
+    flash("ok", `Book created in the cloud. Bin ID: ${cfg.binId} — share this with Claude to collaborate.`);
+    render();
+  } catch(e){ flash("err", `Could not create bin: ${e.message}`); }
+}
+
+async function pullRemote(silent){
+  if (!cfg.binId || !cfg.key) return !silent && flash("err", "Sync not configured — see Settings.");
+  try {
+    syncStatus("off", "Pulling…");
+    const res = await fetch(`${BIN_API}/${cfg.binId}/latest`, { headers:{ "X-Master-Key":cfg.key } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || res.status);
+    const remote = Object.assign({}, DEFAULT_STATE, data.record);
+    const remoteNewer = (remote.lastWrite || 0) > (state.lastWrite || 0) || remote.version > state.version;
+    if (remoteNewer){
+      state = remote; remoteVersionSeen = remote.version;
+      persistLocal(); render();
+      syncStatus("ok", `Synced · v${state.version} pulled ${timeStr(Date.now())}`);
+      if (!silent) flash("ok", "Pulled newer state from the cloud.");
+    } else if (JSON.stringify(remote) === JSON.stringify(state)){
+      remoteVersionSeen = remote.version;
+      syncStatus("ok", `Synced · v${state.version} · up to date`);
+      if (!silent) flash("ok", "Already up to date.");
+    } else {
+      // versions diverged — let the user choose explicitly instead of deadlocking
+      remoteVersionSeen = remote.version;
+      if (silent){ syncStatus("ok", `Diverged (local v${state.version} / cloud v${remote.version}) — press Pull to resolve.`); return; }
+      const useCloud = confirm(`Local and cloud copies have diverged (local v${state.version}, cloud v${remote.version}).\n\nOK = replace local with the CLOUD copy (adopts Claude's latest changes).\nCancel = keep LOCAL and push it to the cloud.`);
+      if (useCloud){
+        state = remote; persistLocal(); render();
+        syncStatus("ok", `Synced · adopted cloud v${state.version}`);
+        flash("ok", "Adopted the cloud copy.");
+      } else {
+        state.version = Math.max(state.version, remote.version) + 1;
+        persistLocal(); await pushRemote(false); render();
+      }
+    }
+  } catch(e){ syncStatus("err", "Sync error"); if (!silent) flash("err", `Pull failed: ${e.message}`); }
+}
+
+async function pushRemote(silent){
+  if (!cfg.binId || !cfg.key) return !silent && flash("err", "Sync not configured — see Settings.");
+  try {
+    // keep the version monotonic across both writers
+    const chk = await fetch(`${BIN_API}/${cfg.binId}/latest`, { headers:{ "X-Master-Key":cfg.key } });
+    if (chk.ok){
+      const remote = (await chk.json()).record || {};
+      if ((remote.version || 0) >= state.version) state.version = (remote.version || 0) + 1;
+    }
+    state.lastWrite = Date.now();
+    persistLocal();
+    const res = await fetch(`${BIN_API}/${cfg.binId}`, { method:"PUT", headers:{ "Content-Type":"application/json", "X-Master-Key":cfg.key }, body: JSON.stringify(state) });
+    if (!res.ok){ const d = await res.json().catch(()=>({})); throw new Error(d.message || res.status); }
+    remoteVersionSeen = state.version;
+    syncStatus("ok", `Synced · v${state.version} pushed ${timeStr(Date.now())}`);
+    if (!silent) flash("ok", "Pushed to the cloud.");
+  } catch(e){ syncStatus("err", "Sync error"); if (!silent) flash("err", `Push failed: ${e.message}`); }
+}
+
+function setPolling(){
+  clearInterval(pollTimer);
+  if (cfg.autoPull && cfg.binId && cfg.key) pollTimer = setInterval(() => pullRemote(true), 60000);
+}
+
+// ————— pricing —————
+// Equities: Yahoo's live quote API (direct, then via CORS relay), Finnhub as optional fallback.
+function fetchWithTimeout(url, ms, opts){
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, Object.assign({ signal: ctl.signal }, opts || {})).finally(() => clearTimeout(t));
+}
+async function fetchYahooQuote(ticker){
+  const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1m&range=1d`;
+  const attempts = [
+    { url: yUrl, src: "Yahoo live", ms: 2500 },
+    { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(yUrl)}`, src: "Yahoo live (relay)", ms: 9000 },
+  ];
+  for (const a of attempts){
+    try {
+      const res = await fetchWithTimeout(a.url, a.ms);
+      if (!res.ok) continue;
+      const d = await res.json();
+      const meta = d?.chart?.result?.[0]?.meta;
+      if (meta && typeof meta.regularMarketPrice === "number" && meta.regularMarketPrice > 0)
+        return { px: meta.regularMarketPrice, src: a.src, qts: (meta.regularMarketTime || 0) * 1000 };
+    } catch(e){ /* try next */ }
+  }
+  if (cfg.finnhub){
+    try {
+      const res = await fetchWithTimeout(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(ticker)}&token=${encodeURIComponent(cfg.finnhub)}`, 6000);
+      const q = await res.json();
+      if (q && typeof q.c === "number" && q.c > 0) return { px: q.c, src: "Finnhub", qts: Date.now() };
+    } catch(e){}
+  }
+  return null;
+}
+
+async function markToMarket(){
+  if (!state.positions.length) return flash("err", "No positions to mark. Add a position first.");
+  const btn = document.getElementById("markBtn");
+  btn.disabled = true; btn.textContent = "Marking…";
+  const errs = [];
+  const now = Date.now();
+  const crypto = state.positions.filter(p => p.venue === "crypto");
+  const equity = state.positions.filter(p => p.venue === "equity");
+  const tasks = [];
+  if (crypto.length){
+    // group by HIP-3 dex: "xyz:PURRDAT" -> dex "xyz"; plain tickers -> default dex
+    const byDex = {};
+    crypto.forEach(p => {
+      const t = p.ticker;
+      const dex = t.includes(":") ? t.split(":")[0].toLowerCase() : "";
+      (byDex[dex] = byDex[dex] || []).push(p);
+    });
+    for (const dex of Object.keys(byDex)){
+      tasks.push((async () => {
+        try {
+          const body = dex ? { type:"allMids", dex } : { type:"allMids" };
+          const res = await fetchWithTimeout("https://api.hyperliquid.xyz/info", 8000, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body) });
+          const mids = await res.json();
+          byDex[dex].forEach(p => {
+            const k = p.ticker;
+            const raw = mids[k] ?? mids[k.toUpperCase()] ?? mids[`${k.toUpperCase()}/USDC`] ?? mids[`${dex}:${k.split(":").pop().toUpperCase()}`];
+            if (raw !== undefined) state.prices[p.ticker] = { px: parseFloat(raw), ts: now, src: dex ? `Hyperliquid ${dex} dex` : "Hyperliquid" };
+            else errs.push(`${p.ticker}: not on Hyperliquid${dex ? " ("+dex+" dex)" : ""}`);
+          });
+        } catch(e){ errs.push(`Hyperliquid${dex ? " "+dex : ""} unreachable`); }
+      })());
+    }
+  }
+  equity.forEach(p => {
+    tasks.push((async () => {
+      const q = await fetchYahooQuote(p.ticker.toUpperCase());
+      if (q) state.prices[p.ticker] = { px: q.px, ts: q.qts || now, src: q.src };
+      else errs.push(`${p.ticker}: no live quote (Yahoo${cfg.finnhub ? "/Finnhub" : ""}) — set a manual mark or ask Claude`);
+    })());
+  });
+  await Promise.all(tasks);
+  btn.disabled = false; btn.textContent = "Mark to market";
+  commit("Marked to market", errs.length ? `Partial — ${errs.join("; ")}` : `${state.positions.length} positions repriced`);
+  flash(errs.length ? "err" : "ok", errs.length ? errs.join(" · ") : "Book marked to market.");
+}
+
+// ————— derived —————
+function pricedBook(){
+  return state.positions.map(p => {
+    const q = state.prices[p.ticker];
+    const px = q ? q.px : null;
+    const mv = px !== null && px !== undefined ? px * p.qty : null;
+    const cost = p.avgEntry * p.qty;
+    const upl = mv !== null ? mv - cost : null;
+    return { ...p, px, mv, cost, upl, ret: (upl !== null && cost !== 0) ? upl/Math.abs(cost) : null, src: q?q.src:null, mts: q?q.ts:null };
+  }).sort((a,b) => (b.mv||0)-(a.mv||0));
+}
+
+// ————— mutations —————
+function savePosition(f, existing){
+  const pos = { id: existing ? existing.id : uid(), ticker: f.ticker, venue: f.venue, qty: f.qty, avgEntry: f.avgEntry, notes: f.notes, openedAt: existing ? existing.openedAt : new Date().toISOString().slice(0,10) };
+  const i = state.positions.findIndex(p => p.id === pos.id);
+  if (i === -1) state.positions.push(pos); else state.positions[i] = pos;
+  commit(existing ? "Position edited" : "Position added", `${pos.ticker}: ${fmtNum(pos.qty)} @ ${fmtUSD(pos.avgEntry)}`);
+}
+function deletePosition(id){
+  const p = state.positions.find(x => x.id === id);
+  state.positions = state.positions.filter(x => x.id !== id);
+  commit("Position deleted", p ? p.ticker : id);
+}
+function setManualPrice(ticker, px){
+  state.prices[ticker] = { px, ts: Date.now(), src: "Manual" };
+  commit("Manual mark set", `${ticker} @ ${fmtUSD(px)}`);
+}
+function logTrade(t){
+  state.trades.unshift({ ...t, id: uid(), ts: Date.now() });
+  const i = state.positions.findIndex(p => p.ticker === t.ticker);
+  if (t.side === "buy"){
+    if (i === -1) state.positions.push({ id: uid(), ticker: t.ticker, venue: t.venue, qty: t.qty, avgEntry: t.price, notes: "", openedAt: t.date });
+    else {
+      const p = state.positions[i];
+      const nq = p.qty + t.qty;
+      state.positions[i] = { ...p, qty: nq, avgEntry: nq !== 0 ? (p.qty*p.avgEntry + t.qty*t.price)/nq : p.avgEntry };
+    }
+  } else if (i !== -1){
+    const p = state.positions[i];
+    const sq = Math.min(t.qty, p.qty);
+    state.realized += sq * (t.price - p.avgEntry);
+    const nq = p.qty - t.qty;
+    if (nq <= 1e-7) state.positions.splice(i,1);
+    else state.positions[i] = { ...p, qty: nq };
+  }
+  let cashNote = "";
+  if (state.cashSweep){
+    const notional = t.qty * t.price;
+    state.cash = (state.cash || 0) + (t.side === "buy" ? -notional : notional);
+    cashNote = ` · cash ${t.side === "buy" ? "−" : "+"}${fmtUSD(notional, 0)}`;
+  }
+  commit(`Trade: ${t.side.toUpperCase()} ${t.ticker}`, `${fmtNum(t.qty)} @ ${fmtUSD(t.price)}${cashNote}${t.commentary ? " — " + t.commentary : ""}`);
+}
+function deleteTrade(id){
+  const t = state.trades.find(x => x.id === id);
+  state.trades = state.trades.filter(x => x.id !== id);
+  commit("Blotter entry removed", t ? `${t.side.toUpperCase()} ${t.ticker} ${fmtNum(t.qty)} @ ${fmtUSD(t.price)}` : id);
+}
+function addIdea(f){
+  state.ideas.unshift({ ...f, id: uid(), createdAt: Date.now(), status: "watching" });
+  commit("Idea filed", `${f.ticker} ${f.direction}`);
+}
+function setIdeaStatus(id, status){
+  const i = state.ideas.find(x => x.id === id);
+  if (i){ i.status = status; commit("Idea " + status, i.ticker); }
+}
+function deleteIdea(id){
+  const i = state.ideas.find(x => x.id === id);
+  state.ideas = state.ideas.filter(x => x.id !== id);
+  commit("Idea deleted", i ? i.ticker : id);
+}
+
+// ————— UI plumbing —————
+function flash(kind, msg){
+  const b = document.getElementById("banner");
+  b.className = `banner show ${kind}`; b.textContent = msg;
+  clearTimeout(flash._t); flash._t = setTimeout(() => b.className = "banner", 5000);
+}
+
+const TABS = [["book","Book"],["blotter","Blotter"],["ideas","Ideas"],["wire","Wire"],["log","Log"],["settings","Settings"]];
+function renderTabs(){
+  document.getElementById("tabs").innerHTML = TABS.map(([k,l]) =>
+    `<button class="tab ${page===k?"on":""}" data-tab="${k}">${l}</button>`).join("");
+}
+
+function renderNav(){
+  const book = pricedBook();
+  const grossMV = book.reduce((s,p)=>s+(p.mv||0),0);
+  const upl = book.reduce((s,p)=>s+(p.upl||0),0);
+  const unpriced = book.filter(p => p.px === null || p.px === undefined).length;
+  const lastMark = Object.values(state.prices).reduce((m,q)=>Math.max(m,q.ts||0),0);
+  document.getElementById("aumFig").textContent = fmtUSD(grossMV + (state.cash||0), 0);
+  document.getElementById("navEyebrow").textContent = `Net asset value ${lastMark ? "· marked " + timeStr(lastMark) : "· unmarked"} · v${state.version}`;
+  const uplEl = document.getElementById("uplFig"); uplEl.textContent = signed(upl,0); uplEl.className = "stat-val " + (upl>=0?"gain":"loss");
+  const rlzEl = document.getElementById("rlzFig"); rlzEl.textContent = signed(state.realized,0); rlzEl.className = "stat-val " + (state.realized>=0?"gain":"loss");
+  document.getElementById("cashBtn").textContent = fmtUSD(state.cash||0, 0);
+  const warn = document.getElementById("navWarn");
+  if (unpriced > 0){ warn.style.display = "block"; warn.textContent = `${unpriced} position${unpriced>1?"s":""} unpriced — mark the book`; }
+  else warn.style.display = "none";
+}
+
+// ————— pages —————
+function renderBook(){
+  const book = pricedBook();
+  const grossMV = book.reduce((s,p)=>s+(p.mv||0),0);
+  let html = `<div class="page-head"><h2 class="h2">Positions</h2><button class="btn" data-act="pos-new">Add position</button></div>`;
+  if (state.claudeNotes) html += `<div class="sheet" style="border-color:var(--brass-dk)"><div class="eyebrow" style="margin-bottom:8px">Note from Claude</div><div style="font-size:13px; white-space:pre-wrap">${esc(state.claudeNotes)}</div></div>`;
+  if (!book.length) html += `<div class="empty">The book is empty. Add your existing positions — ticker, size, average entry — then mark to market.</div>`;
+  else {
+    html += `<div class="table-wrap"><table><thead><tr><th>Name</th><th class="num">Qty</th><th class="num">Avg entry</th><th class="num">Mark</th><th class="num">Mkt value</th><th class="num">Wt</th><th class="num">Unrealised</th><th class="num">Return</th><th></th></tr></thead><tbody>`;
+    book.forEach(p => {
+      html += `<tr>
+        <td><div class="tick">${esc(p.ticker)}</div><div class="venue">${p.venue==="crypto"?"Hyperliquid":"Equity"}${p.notes?" · "+esc(p.notes):""}</div></td>
+        <td class="num mono">${fmtNum(p.qty)}</td>
+        <td class="num mono">${fmtUSD(p.avgEntry)}</td>
+        <td class="num mono">${fmtUSD(p.px)}${p.src?`<div class="src">${esc(p.src)} · ${timeStr(p.mts)}</div>`:""}</td>
+        <td class="num mono">${fmtUSD(p.mv,0)}</td>
+        <td class="num mono">${grossMV>0 && p.mv!==null ? ((p.mv/grossMV)*100).toFixed(1)+"%" : "—"}</td>
+        <td class="num mono ${p.upl===null?"":p.upl>=0?"gain":"loss"}">${signed(p.upl,0)}</td>
+        <td class="num mono ${p.ret===null?"":p.ret>=0?"gain":"loss"}">${fmtPct(p.ret)}</td>
+        <td class="num"><button class="btn tiny ghost" data-act="pos-edit" data-id="${p.id}">Edit</button></td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  html += `<div id="posFormMount"></div>`;
+  return html;
+}
+
+function positionFormHTML(p){
+  const isNew = !p;
+  const f = p || { ticker:"", venue:"equity", qty:"", avgEntry:"", notes:"" };
+  return `<div class="sheet" style="margin-top:20px" id="posForm" data-id="${p?p.id:""}">
+    <div class="sheet-head"><h3 class="h3">${isNew?"New position":"Edit "+esc(f.ticker)}</h3><button class="btn tiny ghost" data-act="pos-close">Close</button></div>
+    <div class="grid">
+      <label class="fld"><span>Ticker</span><input class="inp" id="pf-ticker" value="${esc(f.ticker)}" placeholder="ORCL / HYPE / PURR"></label>
+      <label class="fld"><span>Venue</span><select class="inp" id="pf-venue">
+        <option value="equity" ${f.venue==="equity"?"selected":""}>Equity</option>
+        <option value="crypto" ${f.venue==="crypto"?"selected":""}>Crypto (Hyperliquid)</option></select></label>
+      <label class="fld"><span>Quantity</span><input class="inp" id="pf-qty" type="number" step="any" value="${f.qty}"></label>
+      <label class="fld"><span>Avg entry (USD)</span><input class="inp" id="pf-entry" type="number" step="any" value="${f.avgEntry}"></label>
+      <label class="fld wide"><span>Notes</span><input class="inp" id="pf-notes" value="${esc(f.notes||"")}" placeholder="e.g. core position · adding under 66"></label>
+      ${isNew ? "" : `<label class="fld"><span>Manual mark (USD)</span><div class="row-inline"><input class="inp" id="pf-manual" type="number" step="any" placeholder="override price"><button class="btn tiny" data-act="pos-manual" data-ticker="${esc(f.ticker)}">Set</button></div></label>`}
+    </div>
+    <div class="sheet-foot">
+      ${isNew ? "" : `<button class="btn ghost danger" data-act="pos-del" data-id="${p.id}">Delete position</button>`}
+      <button class="btn brass" data-act="pos-save">Save</button>
+    </div></div>`;
+}
+
+function renderBlotter(){
+  let html = `<div class="page-head"><h2 class="h2">Blotter</h2></div>
+  <div class="sheet"><div class="grid">
+    <label class="fld"><span>Ticker</span><input class="inp" id="tf-ticker" list="posList" placeholder="ORCL"><datalist id="posList">${state.positions.map(p=>`<option value="${esc(p.ticker)}">`).join("")}</datalist></label>
+    <label class="fld"><span>Side</span><select class="inp" id="tf-side"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
+    <label class="fld"><span>Quantity</span><input class="inp" id="tf-qty" type="number" step="any"></label>
+    <label class="fld"><span>Price (USD)</span><input class="inp" id="tf-price" type="number" step="any"></label>
+    <label class="fld"><span>Date</span><input class="inp" id="tf-date" type="date" value="${new Date().toISOString().slice(0,10)}"></label>
+    <label class="fld"><span>Venue (new names)</span><select class="inp" id="tf-venue"><option value="equity">Equity</option><option value="crypto">Crypto (Hyperliquid)</option></select></label>
+    <label class="fld wide"><span>Commentary</span><textarea class="inp" id="tf-comm" placeholder="Why now — thesis, trigger, sizing logic, exit plan…"></textarea></label>
+  </div>
+  <div class="sheet-foot"><span class="hint">Buys create or average into positions; sells reduce them and book realised P&amp;L against average entry.</span><button class="btn brass" data-act="trade-log">Log trade</button></div></div>`;
+  if (!state.trades.length) html += `<div class="empty">No trades on the blotter yet.</div>`;
+  else state.trades.forEach(t => {
+    html += `<article class="blot-item"><div class="blot-line">
+      <span class="side ${t.side}">${t.side==="buy"?"BUY":"SELL"}</span>
+      <span class="tick">${esc(t.ticker)}</span>
+      <span class="mono">${fmtNum(t.qty)} @ ${fmtUSD(t.price)}</span>
+      <span class="mono dim">${fmtUSD(t.qty*t.price,0)} notional</span>
+      <span class="dim date">${esc(t.date)}</span>
+      <button class="btn tiny ghost danger" data-act="trade-del" data-id="${t.id}">×</button>
+    </div>${t.commentary?`<p class="blot-note">${esc(t.commentary)}</p>`:""}</article>`;
+  });
+  return html;
+}
+
+function renderIdeas(){
+  const order = { watching:0, entered:1, passed:2 };
+  const sorted = [...state.ideas].sort((a,b) => order[a.status]-order[b.status] || b.createdAt-a.createdAt);
+  let html = `<div class="page-head"><h2 class="h2">Trade ideas</h2></div>
+  <div class="sheet"><div class="grid">
+    <label class="fld"><span>Ticker / theme</span><input class="inp" id="if-ticker" placeholder="SPCX"></label>
+    <label class="fld"><span>Direction</span><select class="inp" id="if-dir"><option value="long">Long</option><option value="short">Short</option><option value="event">Event / relative</option></select></label>
+    <label class="fld wide"><span>Thesis</span><textarea class="inp" id="if-thesis" placeholder="The case, in two or three sentences…"></textarea></label>
+    <label class="fld wide"><span>Trigger / level</span><input class="inp" id="if-trigger" placeholder="e.g. enter below $66; wait for July 14 CPI"></label>
+  </div><div class="sheet-foot"><button class="btn brass" data-act="idea-add">File idea</button></div></div>`;
+  if (!sorted.length) html += `<div class="empty">No ideas filed. The best ones start here, not in the blotter.</div>`;
+  else {
+    html += `<div class="idea-list">`;
+    sorted.forEach(i => {
+      html += `<article class="idea ${i.status}">
+        <div class="idea-head"><span class="tick">${esc(i.ticker)}</span><span class="dir ${i.direction}">${i.direction.toUpperCase()}</span><span class="status s-${i.status}">${i.status}</span><span class="dim date">${new Date(i.createdAt).toLocaleDateString("en-GB",{day:"2-digit",month:"short"})}</span></div>
+        <p>${esc(i.thesis)}</p>
+        ${i.trigger?`<p class="trg">Trigger — ${esc(i.trigger)}</p>`:""}
+        <div class="idea-actions">
+          ${i.status==="watching" ? `<button class="btn tiny" data-act="idea-status" data-id="${i.id}" data-s="entered">Mark entered</button><button class="btn tiny ghost" data-act="idea-status" data-id="${i.id}" data-s="passed">Pass</button>` : `<button class="btn tiny ghost" data-act="idea-status" data-id="${i.id}" data-s="watching">Reopen</button>`}
+          <button class="btn tiny ghost danger" data-act="idea-del" data-id="${i.id}">Delete</button>
+        </div></article>`;
+    });
+    html += `</div>`;
+  }
+  return html;
+}
+
+function renderWire(){
+  let html = `<div class="page-head"><h2 class="h2">The wire</h2><button class="btn" data-act="pull">Pull latest</button></div>`;
+  html += `<div class="eyebrow" style="margin-bottom:16px">${state.news.fetchedAt ? "Last updated " + timeStr(state.news.fetchedAt) + " · " : ""}Ask Claude in chat to refresh the wire — headlines land here on your next pull.</div>`;
+  if (!state.news.items || !state.news.items.length) html += `<div class="empty">Nothing on the wire. Ask Claude: “refresh the wire” — relevant news for your book will appear here.</div>`;
+  else state.news.items.forEach(n => {
+    html += `<article class="wire-item"><div class="wire-meta">${(n.tickers||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join("")}<span class="dim">${esc(n.source||"")}${n.when?" · "+esc(n.when):""}</span></div>
+      <h3 class="wire-head">${esc(n.headline)}</h3><p class="wire-sum">${esc(n.summary)}</p></article>`;
+  });
+  return html;
+}
+
+function renderLog(){
+  let html = `<div class="page-head"><h2 class="h2">Change log</h2></div>`;
+  if (!state.changelog.length) return html + `<div class="empty">No changes recorded yet.</div>`;
+  html += `<div class="sheet">`;
+  state.changelog.forEach(e => {
+    html += `<div class="log-item">
+      <span class="log-ts">${timeStr(e.ts)}</span>
+      <span class="actor ${esc(e.actor)}">${esc(e.actor)}</span>
+      <span><strong>${esc(e.action)}</strong>${e.detail?` — <span class="dim">${esc(e.detail)}</span>`:""}</span>
+    </div>`;
+  });
+  return html + `</div>`;
+}
+
+function renderSettings(){
+  return `<div class="page-head"><h2 class="h2">Settings</h2></div>
+  <div class="sheet">
+    <h3 class="h3" style="margin-bottom:12px">Cloud sync (JSONBin)</h3>
+    <p class="dim" style="font-size:13px; margin:0 0 14px">Create a free account at jsonbin.io, copy your <strong>Master Key</strong> from the API Keys page, paste it below, then “Create book”. Use a throwaway account dedicated to this app — the key grants access to that account's bins, and you'll share it with Claude to collaborate.</p>
+    <div class="grid">
+      <label class="fld wide"><span>Master key</span><input class="inp" id="sf-key" type="password" value="${esc(cfg.key)}" placeholder="$2a$10$…"></label>
+      <label class="fld wide"><span>Bin ID</span><input class="inp" id="sf-bin" value="${esc(cfg.binId)}" placeholder="auto-filled by Create book, or paste an existing one"></label>
+      <label class="fld"><span>Auto-pull every 60s</span><select class="inp" id="sf-poll"><option value="no" ${!cfg.autoPull?"selected":""}>Off</option><option value="yes" ${cfg.autoPull?"selected":""}>On</option></select></label>
+    </div>
+    <div class="sheet-foot">
+      <span class="hint">To collaborate, tell Claude the bin ID and master key in chat.</span>
+      <button class="btn" data-act="cfg-save">Save settings</button>
+      <button class="btn brass" data-act="cfg-create">Create book</button>
+    </div>
+  </div>
+  <div class="sheet">
+    <h3 class="h3" style="margin-bottom:12px">Equity pricing</h3>
+    <p class="dim" style="font-size:13px; margin:0 0 14px">Equities mark off Yahoo's live quote API by default — wide coverage, no key needed (direct fetch first, then a CORS relay). Optionally add a free finnhub.io key as a fallback if both Yahoo routes are down. Crypto and HIP-3 tickers (e.g. <code class="kbd">xyz:PURRDAT</code> as venue Crypto) always price via Hyperliquid, 24/7.</p>
+    <div class="grid"><label class="fld wide"><span>Finnhub API key (fallback, optional)</span><input class="inp" id="sf-fh" type="password" value="${esc(cfg.finnhub)}" placeholder="optional"></label></div>
+    <div class="sheet-foot"><button class="btn" data-act="cfg-save">Save settings</button></div>
+  </div>
+  <div class="sheet">
+    <h3 class="h3" style="margin-bottom:12px">Trading</h3>
+    <p class="dim" style="font-size:13px; margin:0 0 14px">When cash sweep is on, logged buys debit the cash balance by notional and sells credit the proceeds. Turn it off to backfill historical trades without touching cash. Positions added directly on the Book page never affect cash.</p>
+    <div class="grid"><label class="fld"><span>Cash sweep</span><select class="inp" id="sf-sweep"><option value="yes" ${state.cashSweep?"selected":""}>On — trades move cash</option><option value="no" ${!state.cashSweep?"selected":""}>Off</option></select></label></div>
+    <div class="sheet-foot"><button class="btn" data-act="sweep-save">Save trading settings</button></div>
+  </div>
+  <div class="sheet">
+    <h3 class="h3" style="margin-bottom:12px">Backup</h3>
+    <div class="sheet-foot" style="justify-content:flex-start">
+      <button class="btn" data-act="export">Download JSON backup</button>
+      <label class="btn" style="display:inline-block">Import JSON<input type="file" id="importFile" accept=".json" style="display:none"></label>
+    </div>
+  </div>`;
+}
+
+function render(){
+  renderTabs();
+  renderNav();
+  const el = document.getElementById("page");
+  el.innerHTML = page==="book" ? renderBook()
+    : page==="blotter" ? renderBlotter()
+    : page==="ideas" ? renderIdeas()
+    : page==="wire" ? renderWire()
+    : page==="log" ? renderLog()
+    : renderSettings();
+  const imp = document.getElementById("importFile");
+  if (imp) imp.addEventListener("change", onImport);
+}
+
+// ————— events —————
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-tab],[data-act]");
+  if (!t) return;
+  if (t.dataset.tab){ page = t.dataset.tab; render(); return; }
+  const act = t.dataset.act;
+  if (act === "pos-new"){ document.getElementById("posFormMount").innerHTML = positionFormHTML(null); }
+  else if (act === "pos-edit"){ const p = state.positions.find(x=>x.id===t.dataset.id); document.getElementById("posFormMount").innerHTML = positionFormHTML(p); }
+  else if (act === "pos-close"){ document.getElementById("posFormMount").innerHTML = ""; }
+  else if (act === "pos-save"){
+    const form = document.getElementById("posForm");
+    const f = { ticker: document.getElementById("pf-ticker").value.trim().toUpperCase(), venue: document.getElementById("pf-venue").value, qty: parseFloat(document.getElementById("pf-qty").value), avgEntry: parseFloat(document.getElementById("pf-entry").value), notes: document.getElementById("pf-notes").value.trim() };
+    if (!f.ticker || !(f.qty>0) || !(f.avgEntry>0)) return flash("err", "Ticker, a positive quantity and a positive entry are required.");
+    const existing = form.dataset.id ? state.positions.find(x=>x.id===form.dataset.id) : null;
+    savePosition(f, existing);
+  }
+  else if (act === "pos-del"){ if (confirm("Delete this position?")) deletePosition(t.dataset.id); }
+  else if (act === "pos-manual"){
+    const v = parseFloat(document.getElementById("pf-manual").value);
+    if (v>0) setManualPrice(t.dataset.ticker, v); else flash("err","Enter a positive price.");
+  }
+  else if (act === "trade-log"){
+    const f = { ticker: document.getElementById("tf-ticker").value.trim().toUpperCase(), side: document.getElementById("tf-side").value, qty: parseFloat(document.getElementById("tf-qty").value), price: parseFloat(document.getElementById("tf-price").value), date: document.getElementById("tf-date").value, venue: document.getElementById("tf-venue").value, commentary: document.getElementById("tf-comm").value.trim() };
+    if (!f.ticker || !(f.qty>0) || !(f.price>0)) return flash("err", "Ticker, quantity and price are required.");
+    logTrade(f);
+    flash("ok", `${f.side==="buy"?"Buy":"Sell"} ${fmtNum(f.qty)} ${f.ticker} @ ${fmtUSD(f.price)} logged — book updated.`);
+  }
+  else if (act === "trade-del"){ if (confirm("Remove this entry from the blotter? Positions won't be re-adjusted.")) deleteTrade(t.dataset.id); }
+  else if (act === "idea-add"){
+    const f = { ticker: document.getElementById("if-ticker").value.trim().toUpperCase(), direction: document.getElementById("if-dir").value, thesis: document.getElementById("if-thesis").value.trim(), trigger: document.getElementById("if-trigger").value.trim() };
+    if (!f.ticker || !f.thesis) return flash("err", "Ticker and thesis are required.");
+    addIdea(f);
+  }
+  else if (act === "idea-status"){ setIdeaStatus(t.dataset.id, t.dataset.s); }
+  else if (act === "idea-del"){ if (confirm("Delete this idea?")) deleteIdea(t.dataset.id); }
+  else if (act === "pull"){ pullRemote(false); }
+  else if (act === "cfg-save"){
+    cfg.key = document.getElementById("sf-key").value.trim();
+    cfg.binId = document.getElementById("sf-bin").value.trim();
+    cfg.finnhub = document.getElementById("sf-fh") ? document.getElementById("sf-fh").value.trim() : cfg.finnhub;
+    cfg.autoPull = document.getElementById("sf-poll").value === "yes";
+    persistCfg(); setPolling();
+    syncStatus(cfg.binId && cfg.key ? "ok" : "off", cfg.binId && cfg.key ? `Synced · bin ${cfg.binId}` : "Sync off — local only. Configure in Settings.");
+    flash("ok", "Settings saved.");
+  }
+  else if (act === "sweep-save"){
+    const on = document.getElementById("sf-sweep").value === "yes";
+    if (on !== state.cashSweep){ state.cashSweep = on; commit("Cash sweep " + (on ? "enabled" : "disabled"), ""); }
+    flash("ok", "Trading settings saved.");
+  }
+  else if (act === "cfg-create"){
+    cfg.key = document.getElementById("sf-key").value.trim(); persistCfg();
+    createBin();
+  }
+  else if (act === "export"){
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type:"application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `private-book-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+  }
+});
+
+function onImport(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const s = JSON.parse(r.result);
+      if (!s.positions || !Array.isArray(s.positions)) throw new Error("not a book file");
+      state = Object.assign({}, DEFAULT_STATE, s);
+      logEvent("Book imported from backup", file.name, "system");
+      state.version += 1; persistLocal(); render();
+      flash("ok", "Backup imported.");
+    } catch(err){ flash("err", "Import failed — not a valid book file."); }
+  };
+  r.readAsText(file);
+}
+
+document.getElementById("pullBtn").addEventListener("click", () => pullRemote(false));
+document.getElementById("pushBtn").addEventListener("click", () => pushRemote(false));
+document.getElementById("markBtn").addEventListener("click", markToMarket);
+document.getElementById("cashBtn").addEventListener("click", () => {
+  const v = prompt("Cash balance (USD):", state.cash || 0);
+  if (v === null) return;
+  const n = parseFloat(v);
+  if (isNaN(n)) return flash("err", "Not a number.");
+  state.cash = n;
+  commit("Cash updated", fmtUSD(n, 0));
+});
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (!confirm("Wipe the entire book — positions, blotter, ideas, log? This cannot be undone.")) return;
+  state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  logEvent("Book reset", "", "system");
+  persistLocal(); render();
+});
+
+// boot
+if (!state.changelog.length) logEvent("Book opened for the first time", "", "system");
+render();
+if (cfg.binId && cfg.key){ syncStatus("ok", `Synced · bin ${cfg.binId}`); pullRemote(true); }
+setPolling();
+</script>
+</body>
+</html>
