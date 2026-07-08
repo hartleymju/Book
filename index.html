@@ -451,28 +451,61 @@ function setManualPrice(ticker, px){
 function logTrade(t){
   state.trades.unshift({ ...t, id: uid(), ts: Date.now() });
   const i = state.positions.findIndex(p => p.ticker === t.ticker);
+  const existing = i !== -1 ? state.positions[i] : null;
+  const isPerp = t.kind === "perp" || (existing && existing.kind === "perp");
+  let realizedDelta = 0, marginFlow = 0; // marginFlow: +committed on buy, +released on sell
   if (t.side === "buy"){
-    if (i === -1) state.positions.push({ id: uid(), ticker: t.ticker, venue: t.venue, qty: t.qty, avgEntry: t.price, notes: "", openedAt: t.date });
-    else {
-      const p = state.positions[i];
+    if (!existing){
+      state.positions.push({ id: uid(), ticker: t.ticker, venue: t.venue, kind: isPerp ? "perp" : "cash",
+        qty: t.qty, avgEntry: t.price, margin: isPerp ? (t.margin || 0) : 0,
+        leverage: isPerp && t.margin ? Math.round((t.qty*t.price/t.margin)*10)/10 : null,
+        liqPx: null, notes: "", openedAt: t.date });
+      marginFlow = isPerp ? (t.margin || 0) : 0;
+    } else {
+      const p = existing;
       const nq = p.qty + t.qty;
-      state.positions[i] = { ...p, qty: nq, avgEntry: nq !== 0 ? (p.qty*p.avgEntry + t.qty*t.price)/nq : p.avgEntry };
+      const upd = { ...p, qty: nq, avgEntry: nq !== 0 ? (p.qty*p.avgEntry + t.qty*t.price)/nq : p.avgEntry };
+      if (isPerp){
+        upd.kind = "perp";
+        upd.margin = (p.margin || 0) + (t.margin || 0);
+        marginFlow = t.margin || 0;
+        if (upd.margin > 0) upd.leverage = Math.round((nq*upd.avgEntry/upd.margin)*10)/10;
+      }
+      state.positions[i] = upd;
     }
-  } else if (i !== -1){
-    const p = state.positions[i];
+  } else if (existing){
+    const p = existing;
     const sq = Math.min(t.qty, p.qty);
-    state.realized += sq * (t.price - p.avgEntry);
+    realizedDelta = sq * (t.price - p.avgEntry); // full notional — correct for perps too
+    state.realized += realizedDelta;
     const nq = p.qty - t.qty;
-    if (nq <= 1e-7) state.positions.splice(i,1);
-    else state.positions[i] = { ...p, qty: nq };
+    if (nq <= 1e-7){
+      marginFlow = p.kind === "perp" ? (p.margin || 0) : 0; // full close releases all margin
+      state.positions.splice(i,1);
+    } else {
+      const upd = { ...p, qty: nq };
+      if (p.kind === "perp"){
+        // release what the user specifies; blank = pro-rata with the size reduction
+        const released = t.margin ? Math.min(t.margin, p.margin || 0) : (p.margin || 0) * (t.qty / p.qty);
+        upd.margin = Math.max(0, (p.margin || 0) - released);
+        marginFlow = released;
+        if (upd.margin > 0) upd.leverage = Math.round((nq*upd.avgEntry/upd.margin)*10)/10;
+      }
+      state.positions[i] = upd;
+    }
   }
   let cashNote = "";
   if (state.cashSweep){
-    const notional = t.qty * t.price;
-    state.cash = (state.cash || 0) + (t.side === "buy" ? -notional : notional);
-    cashNote = ` · cash ${t.side === "buy" ? "−" : "+"}${fmtUSD(notional, 0)}`;
+    // Perps move margin (plus realised PnL on reduces); cash trades move full notional.
+    const delta = isPerp
+      ? (t.side === "buy" ? -marginFlow : marginFlow + realizedDelta)
+      : (t.side === "buy" ? -(t.qty * t.price) : t.qty * t.price);
+    state.cash = (state.cash || 0) + delta;
+    if (delta !== 0) cashNote = ` · cash ${delta >= 0 ? "+" : "−"}${fmtUSD(Math.abs(delta), 0)}`;
   }
-  commit(`Trade: ${t.side.toUpperCase()} ${t.ticker}`, `${fmtNum(t.qty)} @ ${fmtUSD(t.price)}${cashNote}${t.commentary ? " — " + t.commentary : ""}`);
+  const ptxt = isPerp ? ` (perp${t.margin ? `, margin ${t.side==="buy" ? "+" : "released "}${fmtUSD(t.margin,0)}` : t.side==="sell" ? ", margin pro-rata" : ""})` : "";
+  commit(`Trade: ${t.side.toUpperCase()} ${t.ticker}${isPerp ? " perp" : ""}`,
+    `${fmtNum(t.qty)} @ ${fmtUSD(t.price)}${ptxt}${cashNote}${t.commentary ? " — " + t.commentary : ""}`);
 }
 function deleteTrade(id){
   const t = state.trades.find(x => x.id === id);
@@ -590,9 +623,11 @@ function renderBlotter(){
     <label class="fld"><span>Price (USD)</span><input class="inp" id="tf-price" type="number" step="any"></label>
     <label class="fld"><span>Date</span><input class="inp" id="tf-date" type="date" value="${new Date().toISOString().slice(0,10)}"></label>
     <label class="fld"><span>Venue (new names)</span><select class="inp" id="tf-venue"><option value="equity">Equity</option><option value="crypto">Crypto (Hyperliquid)</option></select></label>
+    <label class="fld"><span>Type</span><select class="inp" id="tf-kind"><option value="cash">Cash / spot</option><option value="perp">Perp</option></select></label>
+    <label class="fld"><span>Margin (USD, perps)</span><input class="inp" id="tf-margin" type="number" step="any" placeholder="added on buy / released on sell (blank = pro-rata)"></label>
     <label class="fld wide"><span>Commentary</span><textarea class="inp" id="tf-comm" placeholder="Why now — thesis, trigger, sizing logic, exit plan…"></textarea></label>
   </div>
-  <div class="sheet-foot"><span class="hint">Buys create or average into positions; sells reduce them and book realised P&amp;L against average entry.</span><button class="btn brass" data-act="trade-log">Log trade</button></div></div>`;
+  <div class="sheet-foot"><span class="hint">Cash trades: buys average in, sells book realised P&amp;L, cash sweeps full notional. Perps: margin field adds margin on buys and releases it on sells (blank = pro-rata); realised P&amp;L books off full notional; cash sweeps margin ± realised, never notional.</span><button class="btn brass" data-act="trade-log">Log trade</button></div></div>`;
   if (!state.trades.length) html += `<div class="empty">No trades on the blotter yet.</div>`;
   else state.trades.forEach(t => {
     html += `<article class="blot-item"><div class="blot-line">
@@ -741,10 +776,16 @@ document.addEventListener("click", e => {
     if (v>0) setManualPrice(t.dataset.ticker, v); else flash("err","Enter a positive price.");
   }
   else if (act === "trade-log"){
-    const f = { ticker: document.getElementById("tf-ticker").value.trim().toUpperCase(), side: document.getElementById("tf-side").value, qty: parseFloat(document.getElementById("tf-qty").value), price: parseFloat(document.getElementById("tf-price").value), date: document.getElementById("tf-date").value, venue: document.getElementById("tf-venue").value, commentary: document.getElementById("tf-comm").value.trim() };
+    const f = { ticker: document.getElementById("tf-ticker").value.trim().toUpperCase(), side: document.getElementById("tf-side").value, qty: parseFloat(document.getElementById("tf-qty").value), price: parseFloat(document.getElementById("tf-price").value), date: document.getElementById("tf-date").value, venue: document.getElementById("tf-venue").value,
+      kind: document.getElementById("tf-kind").value,
+      margin: parseFloat(document.getElementById("tf-margin").value) || 0,
+      commentary: document.getElementById("tf-comm").value.trim() };
     if (!f.ticker || !(f.qty>0) || !(f.price>0)) return flash("err", "Ticker, quantity and price are required.");
+    const exists = state.positions.some(p => p.ticker === f.ticker);
+    if (f.kind === "perp" && f.side === "buy" && !exists && !(f.margin>0))
+      return flash("err", "Opening a new perp needs a margin amount — that's what enters your NAV.");
     logTrade(f);
-    flash("ok", `${f.side==="buy"?"Buy":"Sell"} ${fmtNum(f.qty)} ${f.ticker} @ ${fmtUSD(f.price)} logged — book updated.`);
+    flash("ok", `${f.side==="buy"?"Buy":"Sell"} ${fmtNum(f.qty)} ${f.ticker}${f.kind==="perp"?" (perp)":""} @ ${fmtUSD(f.price)} logged — book updated.`);
   }
   else if (act === "trade-del"){ if (confirm("Remove this entry from the blotter? Positions won't be re-adjusted.")) deleteTrade(t.dataset.id); }
   else if (act === "idea-add"){
