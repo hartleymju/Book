@@ -417,19 +417,27 @@ function pricedBook(){
   return state.positions.map(p => {
     const q = state.prices[p.ticker];
     const px = q ? q.px : null;
-    const mv = px !== null && px !== undefined ? px * p.qty : null;
-    const cost = p.avgEntry * p.qty;
-    const upl = mv !== null ? mv - cost : null;
-    return { ...p, px, mv, cost, upl, ret: (upl !== null && cost !== 0) ? upl/Math.abs(cost) : null, src: q?q.src:null, mts: q?q.ts:null };
+    const isPerp = p.kind === "perp";
+    const upl = px !== null && px !== undefined ? (px - p.avgEntry) * p.qty : null;
+    // Perps: NAV carries margin + uPnL (the equity in the trade); notional only drives PnL.
+    const mv = px === null || px === undefined ? null : (isPerp ? (p.margin || 0) + upl : px * p.qty);
+    const base = isPerp ? (p.margin || 0) : p.avgEntry * p.qty; // denominator for return (ROE for perps)
+    return { ...p, px, mv, upl, isPerp,
+      notional: px !== null && px !== undefined ? px * p.qty : null,
+      ret: (upl !== null && base !== 0) ? upl / Math.abs(base) : null,
+      src: q?q.src:null, mts: q?q.ts:null };
   }).sort((a,b) => (b.mv||0)-(a.mv||0));
 }
 
 // ————— mutations —————
 function savePosition(f, existing){
-  const pos = { id: existing ? existing.id : uid(), ticker: f.ticker, venue: f.venue, qty: f.qty, avgEntry: f.avgEntry, notes: f.notes, openedAt: existing ? existing.openedAt : new Date().toISOString().slice(0,10) };
+  const pos = { id: existing ? existing.id : uid(), ticker: f.ticker, venue: f.venue, kind: f.kind || "cash",
+    qty: f.qty, avgEntry: f.avgEntry, margin: f.margin || 0, leverage: f.leverage || null, liqPx: f.liqPx || null,
+    notes: f.notes, openedAt: existing ? existing.openedAt : new Date().toISOString().slice(0,10) };
   const i = state.positions.findIndex(p => p.id === pos.id);
   if (i === -1) state.positions.push(pos); else state.positions[i] = pos;
-  commit(existing ? "Position edited" : "Position added", `${pos.ticker}: ${fmtNum(pos.qty)} @ ${fmtUSD(pos.avgEntry)}`);
+  commit(existing ? "Position edited" : "Position added",
+    `${pos.ticker}: ${fmtNum(pos.qty)} @ ${fmtUSD(pos.avgEntry)}${pos.kind==="perp" ? ` (perp, margin ${fmtUSD(pos.margin,0)})` : ""}`);
 }
 function deletePosition(id){
   const p = state.positions.find(x => x.id === id);
@@ -524,15 +532,18 @@ function renderBook(){
   else {
     html += `<div class="table-wrap"><table><thead><tr><th>Name</th><th class="num">Qty</th><th class="num">Avg entry</th><th class="num">Mark</th><th class="num">Mkt value</th><th class="num">Wt</th><th class="num">Unrealised</th><th class="num">Return</th><th></th></tr></thead><tbody>`;
     book.forEach(p => {
+      const sub = p.isPerp
+        ? `Perp ${p.leverage ? p.leverage + "x" : ""} · margin ${fmtUSD(p.margin, 0)}${p.liqPx ? " · liq " + fmtUSD(p.liqPx) : ""}${p.notional !== null ? " · notional " + fmtUSD(p.notional, 0) : ""}`
+        : `${p.venue === "crypto" ? "Hyperliquid" : "Equity"}${p.notes ? " · " + esc(p.notes) : ""}`;
       html += `<tr>
-        <td><div class="tick">${esc(p.ticker)}</div><div class="venue">${p.venue==="crypto"?"Hyperliquid":"Equity"}${p.notes?" · "+esc(p.notes):""}</div></td>
+        <td><div class="tick">${esc(p.ticker)}</div><div class="venue">${sub}</div></td>
         <td class="num mono">${fmtNum(p.qty)}</td>
         <td class="num mono">${fmtUSD(p.avgEntry)}</td>
         <td class="num mono">${fmtUSD(p.px)}${p.src?`<div class="src">${esc(p.src)} · ${timeStr(p.mts)}</div>`:""}</td>
-        <td class="num mono">${fmtUSD(p.mv,0)}</td>
+        <td class="num mono">${fmtUSD(p.mv,0)}${p.isPerp?`<div class="src">margin + uPnL</div>`:""}</td>
         <td class="num mono">${grossMV>0 && p.mv!==null ? ((p.mv/grossMV)*100).toFixed(1)+"%" : "—"}</td>
         <td class="num mono ${p.upl===null?"":p.upl>=0?"gain":"loss"}">${signed(p.upl,0)}</td>
-        <td class="num mono ${p.ret===null?"":p.ret>=0?"gain":"loss"}">${fmtPct(p.ret)}</td>
+        <td class="num mono ${p.ret===null?"":p.ret>=0?"gain":"loss"}">${fmtPct(p.ret)}${p.isPerp?`<div class="src">ROE</div>`:""}</td>
         <td class="num"><button class="btn tiny ghost" data-act="pos-edit" data-id="${p.id}">Edit</button></td>
       </tr>`;
     });
@@ -544,7 +555,8 @@ function renderBook(){
 
 function positionFormHTML(p){
   const isNew = !p;
-  const f = p || { ticker:"", venue:"equity", qty:"", avgEntry:"", notes:"" };
+  const f = p || { ticker:"", venue:"equity", kind:"cash", qty:"", avgEntry:"", margin:"", leverage:"", liqPx:"", notes:"" };
+  const isPerp = f.kind === "perp";
   return `<div class="sheet" style="margin-top:20px" id="posForm" data-id="${p?p.id:""}">
     <div class="sheet-head"><h3 class="h3">${isNew?"New position":"Edit "+esc(f.ticker)}</h3><button class="btn tiny ghost" data-act="pos-close">Close</button></div>
     <div class="grid">
@@ -552,8 +564,14 @@ function positionFormHTML(p){
       <label class="fld"><span>Venue</span><select class="inp" id="pf-venue">
         <option value="equity" ${f.venue==="equity"?"selected":""}>Equity</option>
         <option value="crypto" ${f.venue==="crypto"?"selected":""}>Crypto (Hyperliquid)</option></select></label>
-      <label class="fld"><span>Quantity</span><input class="inp" id="pf-qty" type="number" step="any" value="${f.qty}"></label>
+      <label class="fld"><span>Type</span><select class="inp" id="pf-kind">
+        <option value="cash" ${!isPerp?"selected":""}>Cash / spot</option>
+        <option value="perp" ${isPerp?"selected":""}>Perp (margin in NAV)</option></select></label>
+      <label class="fld"><span>Quantity / size</span><input class="inp" id="pf-qty" type="number" step="any" value="${f.qty}"></label>
       <label class="fld"><span>Avg entry (USD)</span><input class="inp" id="pf-entry" type="number" step="any" value="${f.avgEntry}"></label>
+      <label class="fld"><span>Margin (USD, perps)</span><input class="inp" id="pf-margin" type="number" step="any" value="${f.margin ?? ""}" placeholder="equity committed"></label>
+      <label class="fld"><span>Leverage (perps)</span><input class="inp" id="pf-lev" type="number" step="any" value="${f.leverage ?? ""}" placeholder="e.g. 5"></label>
+      <label class="fld"><span>Liq price (perps)</span><input class="inp" id="pf-liq" type="number" step="any" value="${f.liqPx ?? ""}" placeholder="optional"></label>
       <label class="fld wide"><span>Notes</span><input class="inp" id="pf-notes" value="${esc(f.notes||"")}" placeholder="e.g. core position · adding under 66"></label>
       ${isNew ? "" : `<label class="fld"><span>Manual mark (USD)</span><div class="row-inline"><input class="inp" id="pf-manual" type="number" step="any" placeholder="override price"><button class="btn tiny" data-act="pos-manual" data-ticker="${esc(f.ticker)}">Set</button></div></label>`}
     </div>
@@ -704,8 +722,16 @@ document.addEventListener("click", e => {
   else if (act === "pos-close"){ document.getElementById("posFormMount").innerHTML = ""; }
   else if (act === "pos-save"){
     const form = document.getElementById("posForm");
-    const f = { ticker: document.getElementById("pf-ticker").value.trim().toUpperCase(), venue: document.getElementById("pf-venue").value, qty: parseFloat(document.getElementById("pf-qty").value), avgEntry: parseFloat(document.getElementById("pf-entry").value), notes: document.getElementById("pf-notes").value.trim() };
+    const f = { ticker: document.getElementById("pf-ticker").value.trim().toUpperCase(), venue: document.getElementById("pf-venue").value,
+      kind: document.getElementById("pf-kind").value,
+      qty: parseFloat(document.getElementById("pf-qty").value), avgEntry: parseFloat(document.getElementById("pf-entry").value),
+      margin: parseFloat(document.getElementById("pf-margin").value) || 0,
+      leverage: parseFloat(document.getElementById("pf-lev").value) || null,
+      liqPx: parseFloat(document.getElementById("pf-liq").value) || null,
+      notes: document.getElementById("pf-notes").value.trim() };
     if (!f.ticker || !(f.qty>0) || !(f.avgEntry>0)) return flash("err", "Ticker, a positive quantity and a positive entry are required.");
+    if (f.kind === "perp" && !(f.margin>0)) return flash("err", "Perp positions need a margin figure — that's what enters your NAV.");
+    if (f.kind !== "perp"){ f.margin = 0; f.leverage = null; f.liqPx = null; }
     const existing = form.dataset.id ? state.positions.find(x=>x.id===form.dataset.id) : null;
     savePosition(f, existing);
   }
