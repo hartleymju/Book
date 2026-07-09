@@ -133,5 +133,31 @@ def main():
     fetch(BASE, "PUT", state)
     print(f"pushed v{state['version']}: {len(marked)} marks | errors: {errs or 'none'}")
 
+def loop():
+    """Mark every ~60s while US market is open, within this job's window."""
+    window_min = int(os.environ.get("LOOP_MINUTES", "62"))
+    deadline = time.time() + window_min * 60
+    runs = 0
+    while time.time() < deadline:
+        ny = datetime.now(ZoneInfo("America/New_York"))
+        if us_market_open(ny):
+            t0 = time.time()
+            try:
+                main()
+                runs += 1
+            except Exception as e:
+                print(f"iteration error (continuing): {e}")
+            time.sleep(max(5, 60 - (time.time() - t0)))
+        else:
+            mins = ny.hour * 60 + ny.minute
+            if 9 * 60 + 15 <= mins < 9 * 60 + 30 and ny.weekday() < 5:
+                print("pre-open — waiting for 09:30 NY"); time.sleep(30)
+            else:
+                print("market closed — ending loop"); break
+    print(f"loop done: {runs} marks this window")
+
 if __name__ == "__main__":
-    main()
+    if os.environ.get("LOOP") == "1":
+        loop()
+    else:
+        main()
