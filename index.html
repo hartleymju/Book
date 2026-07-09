@@ -235,6 +235,13 @@ const fmtPct = n => (n===null||isNaN(n)) ? "—" : `${n>=0?"+":""}${(n*100).toFi
 const signed = (n, dp) => (n===null||n===undefined||isNaN(n)) ? "—" : `${n>=0?"+":"−"}${fmtUSD(Math.abs(n), dp)}`;
 const timeStr = ts => ts ? new Date(ts).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+// canonical ticker: HIP-3 dex prefix lowercase, coin uppercase (dex names are case-sensitive)
+const normTicker = t => {
+  t = String(t || "").trim();
+  if (!t.includes(":")) return t.toUpperCase();
+  const [dex, ...rest] = t.split(":");
+  return dex.toLowerCase() + ":" + rest.join(":").toUpperCase();
+};
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 // ————— changelog —————
@@ -391,7 +398,8 @@ async function markToMarket(){
           const mids = await res.json();
           byDex[dex].forEach(p => {
             const k = p.ticker;
-            const raw = mids[k] ?? mids[k.toUpperCase()] ?? mids[`${k.toUpperCase()}/USDC`] ?? mids[`${dex}:${k.split(":").pop().toUpperCase()}`];
+            const ck = normTicker(k);
+            const raw = mids[ck] ?? mids[k] ?? mids[`${ck}/USDC`] ?? mids[ck.split(":").pop()];
             if (raw !== undefined) state.prices[p.ticker] = { px: parseFloat(raw), ts: now, src: dex ? `Hyperliquid ${dex} dex` : "Hyperliquid" };
             else errs.push(`${p.ticker}: not on Hyperliquid${dex ? " ("+dex+" dex)" : ""}`);
           });
@@ -757,7 +765,7 @@ document.addEventListener("click", e => {
   else if (act === "pos-close"){ document.getElementById("posFormMount").innerHTML = ""; }
   else if (act === "pos-save"){
     const form = document.getElementById("posForm");
-    const f = { ticker: document.getElementById("pf-ticker").value.trim().toUpperCase(), venue: document.getElementById("pf-venue").value,
+    const f = { ticker: normTicker(document.getElementById("pf-ticker").value), venue: document.getElementById("pf-venue").value,
       kind: document.getElementById("pf-kind").value,
       qty: parseFloat(document.getElementById("pf-qty").value), avgEntry: parseFloat(document.getElementById("pf-entry").value),
       margin: parseFloat(document.getElementById("pf-margin").value) || 0,
@@ -776,7 +784,7 @@ document.addEventListener("click", e => {
     if (v>0) setManualPrice(t.dataset.ticker, v); else flash("err","Enter a positive price.");
   }
   else if (act === "trade-log"){
-    const f = { ticker: document.getElementById("tf-ticker").value.trim().toUpperCase(), side: document.getElementById("tf-side").value, qty: parseFloat(document.getElementById("tf-qty").value), price: parseFloat(document.getElementById("tf-price").value), date: document.getElementById("tf-date").value, venue: document.getElementById("tf-venue").value,
+    const f = { ticker: normTicker(document.getElementById("tf-ticker").value), side: document.getElementById("tf-side").value, qty: parseFloat(document.getElementById("tf-qty").value), price: parseFloat(document.getElementById("tf-price").value), date: document.getElementById("tf-date").value, venue: document.getElementById("tf-venue").value,
       kind: document.getElementById("tf-kind").value,
       margin: parseFloat(document.getElementById("tf-margin").value) || 0,
       commentary: document.getElementById("tf-comm").value.trim() };
