@@ -96,7 +96,9 @@ def main():
                         dex_cache[dex] = jfetch("https://api.hyperliquid.xyz/info", "POST",
                                                 {"type": "allMids", "dex": dex}, HL)
                     pool = dex_cache[dex]
-                raw = pool.get(t) or pool.get(t.upper()) or pool.get(f"{t.upper()}/USDC")
+                # canonical: dex prefix lowercase, coin uppercase (dex names are case-sensitive)
+                ct = (dex + ":" + t.split(":", 1)[1].upper()) if dex else t.upper()
+                raw = pool.get(ct) or pool.get(t) or pool.get(f"{ct}/USDC")
                 if raw:
                     state["prices"][t] = {"px": float(raw), "ts": now,
                                           "src": f"Hyperliquid{' ' + dex + ' dex' if dex else ''} mid (auto)"}
