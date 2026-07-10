@@ -458,7 +458,7 @@ function setManualPrice(ticker, px){
 }
 function logTrade(t){
   state.trades.unshift({ ...t, id: uid(), ts: Date.now() });
-  const i = state.positions.findIndex(p => p.ticker === t.ticker);
+  const i = state.positions.findIndex(p => normTicker(p.ticker) === normTicker(t.ticker));
   const existing = i !== -1 ? state.positions[i] : null;
   const isPerp = t.kind === "perp" || (existing && existing.kind === "perp");
   let realizedDelta = 0, marginFlow = 0; // marginFlow: +committed on buy, +released on sell
@@ -789,7 +789,9 @@ document.addEventListener("click", e => {
       margin: parseFloat(document.getElementById("tf-margin").value) || 0,
       commentary: document.getElementById("tf-comm").value.trim() };
     if (!f.ticker || !(f.qty>0) || !(f.price>0)) return flash("err", "Ticker, quantity and price are required.");
-    const exists = state.positions.some(p => p.ticker === f.ticker);
+    const exists = state.positions.some(p => normTicker(p.ticker) === normTicker(f.ticker));
+    if (f.side === "sell" && !exists)
+      return flash("err", `No open position in ${f.ticker} — check the ticker (open positions autocomplete in the field).`);
     if (f.kind === "perp" && f.side === "buy" && !exists && !(f.margin>0))
       return flash("err", "Opening a new perp needs a margin amount — that's what enters your NAV.");
     logTrade(f);
