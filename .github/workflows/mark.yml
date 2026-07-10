@@ -2,16 +2,19 @@ name: Auto-mark Private Book
 
 on:
   schedule:
-    # Every 5 min across US market hours. 13:00-21:59 UTC covers 09:30-16:00
-    # New York year-round (EDT and EST); mark.py itself enforces the exact
-    # 09:30-16:00 NY window and weekdays, so off-hours runs exit instantly.
-    - cron: '*/5 13-21 * * 1-5'
-    # Crypto marks around the clock, every 30 minutes.
-    - cron: '*/30 * * * *'
+    # Hourly looping job across US market hours: each run marks every ~60s
+    # for up to 62 minutes while the market is open (09:30-16:00 New York,
+    # enforced in mark.py). 13:29-20:29 UTC covers the session in EDT;
+    # off-hours starts exit instantly.
+    - cron: '29 13-20 * * 1-5'
+    # Crypto/perp single-shot marks every 10 minutes during off-hours:
+    # weekday nights (UTC hours outside the US session window) and all weekend.
+    - cron: '*/10 0-12,21-23 * * *'
+    - cron: '*/10 13-20 * * 0,6'
   workflow_dispatch:
     inputs:
       force:
-        description: 'Force equity marks even outside market hours'
+        description: 'Force a one-shot mark incl. equities, any hour'
         required: false
         default: 'false'
 
@@ -22,7 +25,7 @@ concurrency:
 jobs:
   mark:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,5 +35,7 @@ jobs:
         env:
           JSONBIN_KEY: ${{ secrets.JSONBIN_KEY }}
           JSONBIN_BIN: 6a4d02a9da38895dfe3adc02
+          LOOP: ${{ github.event.schedule == '29 13-20 * * 1-5' && '1' || '0' }}
+          LOOP_MINUTES: '62'
           FORCE: ${{ github.event.inputs.force == 'true' && '1' || '0' }}
         run: python mark.py
